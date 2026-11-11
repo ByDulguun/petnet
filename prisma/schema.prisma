@@ -1,0 +1,1328 @@
+// PetNet — Prisma schema
+// The largest pet ecosystem platform in Mongolia.
+//
+// Domains: identity, pets & health, businesses & services, community,
+// content, events, marketplace & orders, adoption, lost & found.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity & Auth (Auth.js v5 compatible)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  BUSINESS_OWNER
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(USER)
+  phone         String?
+  bio           String?
+  city          String?   @default("Ulaanbaatar")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+
+  pets                 Pet[]
+  businesses           Business[]
+  reviews              Review[]
+  appointments         Appointment[]
+  bookings             Booking[]
+  posts                Post[]
+  comments             Comment[]
+  likes                Like[]
+  followers            Follow[]              @relation("following")
+  following            Follow[]              @relation("follower")
+  notifications        Notification[]
+  articles             Article[]
+  eventsHosted         Event[]
+  eventAttendances     EventAttendee[]
+  orders               Order[]
+  listings             MarketplaceListing[]
+  lostFoundReports     LostFoundReport[]
+  adoptionApplications AdoptionApplication[]
+  bookmarks            Bookmark[]
+  courseEnrollments    CourseEnrollment[]
+  reviewVotes          ReviewVote[]
+  businessViews        BusinessView[]
+  searchQueries        SearchQuery[]
+  reports              Report[]
+  businessClaims       BusinessClaim[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pets, Breeds & Health
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PetSpecies {
+  DOG
+  CAT
+  OTHER
+}
+
+enum PetGender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum PetStatus {
+  ACTIVE
+  LOST
+  ADOPTED
+  DECEASED
+}
+
+model Breed {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  name           String
+  nameMn         String? // Mongolian name
+  species        PetSpecies @default(DOG)
+  summary        String     @db.Text
+  history        String?    @db.Text
+  temperament    String[]
+  exerciseNeeds  Int? // 1–5
+  groomingNeeds  Int? // 1–5
+  trainability   Int? // 1–5
+  friendliness   Int? // 1–5
+  sheddingLevel  Int? // 1–5
+  nutrition      String?    @db.Text
+  healthOverview String?    @db.Text
+  commonDiseases String[]
+  lifeExpectancy String? // e.g. "10–13 years"
+  weightRange    String? // e.g. "25–32 kg"
+  heightRange    String? // e.g. "55–62 cm"
+  pros           String[]
+  cons           String[]
+  coverImage     String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  images Image[]
+  pets   Pet[]
+
+  @@index([species])
+}
+
+model Pet {
+  id          String     @id @default(cuid())
+  ownerId     String
+  breedId     String?
+  name        String
+  species     PetSpecies @default(DOG)
+  gender      PetGender  @default(UNKNOWN)
+  status      PetStatus  @default(ACTIVE)
+  birthday    DateTime?
+  weightKg    Float?
+  heightCm    Float?
+  color       String?
+  microchipId String?    @unique
+  food        String?
+  notes       String?    @db.Text
+  avatarUrl   String?
+  isPublic    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  breed Breed? @relation(fields: [breedId], references: [id], onDelete: SetNull)
+
+  images             Image[]
+  vaccinations       VaccinationRecord[]
+  medicalRecords     MedicalRecord[]
+  weightEntries      WeightEntry[]
+  growthEntries      GrowthEntry[]
+  milestones         Milestone[]
+  posts              Post[]
+  lostFoundReports   LostFoundReport[]
+  adoptionListing    AdoptionListing?
+  appointments       Appointment[]
+  bookings           Booking[]
+
+  @@index([ownerId])
+  @@index([breedId])
+}
+
+model Vaccine {
+  id               String     @id @default(cuid())
+  name             String
+  species          PetSpecies @default(DOG)
+  description      String?    @db.Text
+  recommendedAgeWk Int? // first dose age in weeks
+  boosterMonths    Int? // booster interval in months
+  isCore           Boolean    @default(false)
+
+  records VaccinationRecord[]
+}
+
+model VaccinationRecord {
+  id           String    @id @default(cuid())
+  petId        String
+  vaccineId    String
+  administered DateTime
+  nextDueDate  DateTime?
+  batchNumber  String?
+  vetName      String?
+  businessId   String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  pet      Pet       @relation(fields: [petId], references: [id], onDelete: Cascade)
+  vaccine  Vaccine   @relation(fields: [vaccineId], references: [id])
+  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([petId])
+  @@index([nextDueDate])
+}
+
+enum MedicalRecordType {
+  MEDICATION
+  ALLERGY
+  SURGERY
+  LAB_RESULT
+  PRESCRIPTION
+  CHECKUP
+  DENTAL
+  OTHER
+}
+
+model MedicalRecord {
+  id         String            @id @default(cuid())
+  petId      String
+  type       MedicalRecordType
+  title      String
+  details    String?           @db.Text
+  date       DateTime
+  vetName    String?
+  businessId String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  pet        Pet       @relation(fields: [petId], references: [id], onDelete: Cascade)
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  images     Image[]
+
+  @@index([petId, type])
+}
+
+model WeightEntry {
+  id       String   @id @default(cuid())
+  petId    String
+  weightKg Float
+  date     DateTime @default(now())
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId, date])
+}
+
+model GrowthEntry {
+  id       String   @id @default(cuid())
+  petId    String
+  date     DateTime
+  weightKg Float?
+  heightCm Float?
+  photoUrl String?
+  note     String?
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId, date])
+}
+
+model Milestone {
+  id       String   @id @default(cuid())
+  petId    String
+  title    String
+  date     DateTime
+  emoji    String?
+  note     String?
+  photoUrl String?
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId, date])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Businesses & Services (shops, clinics, grooming, training, hotels, shelters…)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Business types are data, not code: adding "Pet Acupuncture" is an INSERT,
+// no deploy required. `icon` is a lucide icon name resolved by a registry
+// with a paw-print fallback; `tone` is a design-system tone key.
+model BusinessCategory {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  nameMn      String?
+  description String?
+  icon        String  @default("paw-print")
+  tone        String  @default("brand")
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  businesses Business[]
+  claims     BusinessClaim[]
+}
+
+// Filterable amenities/attributes (parking, QPay, home visit…) — also data.
+model Amenity {
+  id        String @id @default(cuid())
+  slug      String @unique
+  name      String
+  icon      String @default("check")
+  sortOrder Int    @default(0)
+
+  businesses BusinessAmenity[]
+}
+
+model BusinessAmenity {
+  businessId String
+  amenityId  String
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  amenity  Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([businessId, amenityId])
+  @@index([amenityId])
+}
+
+enum BusinessStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model Business {
+  id          String         @id @default(cuid())
+  ownerId     String
+  categoryId  String
+  parentId    String? // branch of another business
+  status      BusinessStatus @default(PENDING)
+  slug        String         @unique
+  name        String
+  tagline     String?
+  description String?        @db.Text
+  phone       String?
+  email       String?
+  website     String?
+  facebook    String?
+  instagram   String?
+  tiktok      String?
+  address     String?
+  district    String?
+  city        String         @default("Ulaanbaatar")
+  latitude    Float?
+  longitude   Float?
+  logoUrl     String?
+  coverUrl    String?
+  priceLevel  Int? // 1 (₮) – 4 (₮₮₮₮)
+  tags        String[] // free-form searchable tags, e.g. "golden retriever"
+  petsAccepted String[] // species keys: DOG, CAT, SMALL, BIRD
+  avgWaitMin  Int? // typical walk-in wait; live occupancy hooks in later
+  isVerified  Boolean        @default(false)
+  ratingAvg   Float          @default(0)
+  ratingCount Int            @default(0)
+  viewCount   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  category BusinessCategory @relation(fields: [categoryId], references: [id])
+  parent   Business?        @relation("branches", fields: [parentId], references: [id], onDelete: SetNull)
+  branches Business[]       @relation("branches")
+
+  amenities          BusinessAmenity[]
+  hours              BusinessHour[]
+  holidays           BusinessHoliday[]
+  media              BusinessMedia[]
+  faqs               BusinessFaq[]
+  announcements      Announcement[]
+  promotions         Promotion[]
+  certificates       BusinessCertificate[]
+  services           Service[]
+  staff              StaffMember[]
+  images             Image[]
+  reviews            Review[]
+  appointments       Appointment[]
+  bookings           Booking[]
+  products           Product[]
+  events             Event[]
+  views              BusinessView[]
+  vaccinationRecords VaccinationRecord[]
+  medicalRecords     MedicalRecord[]
+  adoptionListings   AdoptionListing[]
+  bookmarks          Bookmark[]
+  claims             BusinessClaim[]
+  reports            Report[]
+
+  @@index([categoryId, city, status])
+  @@index([latitude, longitude])
+  @@index([ownerId])
+  @@index([tags], type: Gin)
+}
+
+// Exceptions to the weekly schedule (public holidays, Tsagaan Sar…).
+// Null opensAt/closesAt = closed that day.
+model BusinessHoliday {
+  id         String   @id @default(cuid())
+  businessId String
+  date       DateTime @db.Date
+  name       String
+  opensAt    String?
+  closesAt   String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, date])
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model BusinessMedia {
+  id           String    @id @default(cuid())
+  businessId   String
+  type         MediaType @default(IMAGE)
+  url          String
+  thumbnailUrl String?
+  alt          String?
+  order        Int       @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, order])
+}
+
+model BusinessFaq {
+  id         String @id @default(cuid())
+  businessId String
+  question   String
+  answer     String @db.Text
+  order      Int    @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  businessId  String
+  title       String
+  body        String   @db.Text
+  publishedAt DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, publishedAt])
+}
+
+model Promotion {
+  id            String    @id @default(cuid())
+  businessId    String
+  title         String
+  description   String?   @db.Text
+  discountLabel String // e.g. "-20%" or "2+1"
+  code          String? // coupon code shown to users
+  startsAt      DateTime?
+  endsAt        DateTime?
+  isActive      Boolean   @default(true)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, isActive])
+}
+
+model BusinessCertificate {
+  id         String  @id @default(cuid())
+  businessId String
+  title      String
+  issuer     String?
+  year       Int?
+  imageUrl   String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+enum BusinessClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Business onboarding request. Two shapes in one model: claiming an existing
+// directory listing (businessId set — approval reassigns that Business's
+// ownerId to the claimant) or submitting a brand-new business (businessId
+// null, full details captured here — approval creates the Business row).
+// The Business row itself is never created/reassigned until APPROVED, so a
+// pending or rejected claim never has any public footprint.
+model BusinessClaim {
+  id          String              @id @default(cuid())
+  userId      String
+  businessId  String?
+  categoryId  String
+  name        String
+  phone       String?
+  address     String?
+  district    String?
+  description String?             @db.Text
+  status      BusinessClaimStatus @default(PENDING)
+  reviewNote  String?             @db.Text
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business?        @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  category BusinessCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([status])
+  @@index([userId])
+}
+
+// ── Moderation (admin CMS foundation) ───────────────────────────────────────
+
+enum ReportReason {
+  SPAM
+  OFFENSIVE
+  FAKE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String?
+  reason     ReportReason
+  details    String?      @db.Text
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  // exactly one target is set
+  reviewId   String?
+  businessId String?
+  postId     String?
+  commentId  String?
+
+  reporter User?     @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+  review   Review?   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([reviewId])
+  @@index([businessId])
+}
+
+// Shared rate-limit ledger for sensitive/abuse-prone endpoints (login,
+// register, booking, business claims, reviews). Backed by Postgres rather
+// than an in-memory Map so limits hold correctly across serverless
+// invocations and multiple server instances — an in-process counter would
+// silently reset per cold start and never actually rate-limit anything in
+// that environment. `key` scopes the window (e.g. "login:<ip>",
+// "booking:<userId>"); a stale row older than any real window is harmless
+// and gets swept opportunistically by the checker itself.
+model RateLimitHit {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
+
+// Caches OpenStreetMap Nominatim geocoding results by normalized query so
+// the same address is never looked up twice — required by Nominatim's
+// usage policy and a cheap win since a business's address rarely changes.
+model GeocodeCache {
+  id        String   @id @default(cuid())
+  query     String   @unique
+  latitude  Float
+  longitude Float
+  createdAt DateTime @default(now())
+}
+
+// Lightweight analytics event; aggregate into dashboards later.
+model BusinessView {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String?
+  source     String? // "search" | "map" | "direct" | "home"
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+}
+
+model SearchQuery {
+  id        String   @id @default(cuid())
+  userId    String?
+  query     String
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([query])
+}
+
+model BusinessHour {
+  id         String  @id @default(cuid())
+  businessId String
+  dayOfWeek  Int // 0 = Sunday … 6 = Saturday
+  opensAt    String? // "09:00" — null = closed
+  closesAt   String?
+  is24h      Boolean @default(false)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, dayOfWeek])
+}
+
+model ServiceCategory {
+  id        String @id @default(cuid())
+  slug      String @unique
+  name      String
+  sortOrder Int    @default(0)
+
+  services Service[]
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  businessId  String
+  categoryId  String?
+  name        String
+  description String?
+  priceMnt    Int? // price in ₮ (MNT)
+  priceMaxMnt Int? // for ranges
+  durationMin Int?
+  isBookable  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  business     Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category     ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  appointments Appointment[]
+  bookings     Booking[]
+
+  @@index([businessId])
+}
+
+model StaffMember {
+  id         String  @id @default(cuid())
+  businessId String
+  name       String
+  title      String? // e.g. "Chief Veterinarian"
+  bio        String? @db.Text
+  photoUrl   String?
+  specialty  String? // e.g. "Surgery", "Dermatology"
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([businessId])
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id         String            @id @default(cuid())
+  userId     String
+  businessId String
+  serviceId  String?
+  staffId    String?
+  petId      String?
+  status     AppointmentStatus @default(PENDING)
+  startsAt   DateTime
+  endsAt     DateTime?
+  note       String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service  Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  staff    StaffMember? @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  pet      Pet?         @relation(fields: [petId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, startsAt])
+  @@index([userId])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+// Multi-day stays: pet hotels, boarding.
+model Booking {
+  id          String        @id @default(cuid())
+  userId      String
+  businessId  String
+  serviceId   String?
+  petId       String?
+  status      BookingStatus @default(PENDING)
+  checkIn     DateTime
+  checkOut    DateTime
+  totalMnt    Int?
+  note        String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service  Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  pet      Pet?     @relation(fields: [petId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, checkIn])
+  @@index([userId])
+}
+
+model Review {
+  id           String    @id @default(cuid())
+  userId       String
+  businessId   String
+  rating       Int // 1–5
+  title        String?
+  body         String?   @db.Text
+  reply        String?   @db.Text // business owner reply
+  repliedAt    DateTime?
+  isVerified   Boolean   @default(false) // left after a completed appointment/booking
+  helpfulCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  images   Image[]
+  media    ReviewMedia[]
+  votes    ReviewVote[]
+  reports  Report[]
+
+  @@unique([userId, businessId])
+  @@index([businessId, rating])
+  @@index([businessId, createdAt])
+}
+
+model ReviewMedia {
+  id           String    @id @default(cuid())
+  reviewId     String
+  type         MediaType @default(IMAGE)
+  url          String
+  thumbnailUrl String?
+  order        Int       @default(0)
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+}
+
+model ReviewVote {
+  reviewId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([reviewId, userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Community (posts, comments, likes, follows)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Post {
+  id        String   @id @default(cuid())
+  authorId  String
+  petId     String?
+  body      String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author   User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  pet      Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
+  images   Image[]
+  comments Comment[]
+  likes    Like[]
+
+  @@index([authorId, createdAt])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  parentId  String?
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("replies")
+  likes   Like[]
+
+  @@index([postId, createdAt])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String?
+  commentId String?
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+enum NotificationType {
+  VACCINE_DUE
+  APPOINTMENT
+  BOOKING
+  LIKE
+  COMMENT
+  FOLLOW
+  ORDER
+  SYSTEM
+  LOST_PET_NEARBY
+  EVENT_REMINDER
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  href      String? // deep link
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Content (knowledge center, training courses)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model ArticleCategory {
+  id       String    @id @default(cuid())
+  slug     String    @unique
+  name     String
+  articles Article[]
+}
+
+model Article {
+  id          String        @id @default(cuid())
+  authorId    String
+  categoryId  String?
+  slug        String        @unique
+  title       String
+  excerpt     String?
+  body        String        @db.Text
+  coverImage  String?
+  status      ArticleStatus @default(DRAFT)
+  readMinutes Int?
+  publishedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category  ArticleCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  bookmarks Bookmark[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model Course {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  title       String
+  description String      @db.Text
+  level       CourseLevel @default(BEGINNER)
+  coverImage  String?
+  priceMnt    Int? // null = free
+  isPublished Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  lessons     Lesson[]
+  enrollments CourseEnrollment[]
+}
+
+model Lesson {
+  id          String  @id @default(cuid())
+  courseId    String
+  order       Int
+  title       String
+  videoUrl    String?
+  body        String? @db.Text
+  durationMin Int?
+  isFree      Boolean @default(false)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, order])
+}
+
+model CourseEnrollment {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  progressPct Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Events
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EventType {
+  MEETUP
+  DOG_SHOW
+  TRAINING_CAMP
+  VACCINATION_DAY
+  ADOPTION_DAY
+  OTHER
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  hostId      String
+  businessId  String?
+  slug        String    @unique
+  title       String
+  description String    @db.Text
+  type        EventType @default(MEETUP)
+  coverImage  String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  venue       String?
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  capacity    Int?
+  priceMnt    Int? // null = free
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  host      User            @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  business  Business?       @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  attendees EventAttendee[]
+  bookmarks Bookmark[]
+
+  @@index([startsAt])
+}
+
+model EventAttendee {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Commerce (shop products, marketplace, orders)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ProductCategory {
+  FOOD
+  TREATS
+  TOYS
+  ACCESSORIES
+  GROOMING
+  HEALTH
+  BEDS
+  CLOTHING
+  OTHER
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  businessId  String
+  slug        String          @unique
+  name        String
+  description String?         @db.Text
+  category    ProductCategory @default(OTHER)
+  brand       String?
+  priceMnt    Int
+  salePriceMnt Int?
+  stock       Int             @default(0)
+  isActive    Boolean         @default(true)
+  ratingAvg   Float           @default(0)
+  ratingCount Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  images     Image[]
+  orderItems OrderItem[]
+  bookmarks  Bookmark[]
+
+  @@index([businessId, category])
+  @@index([category, isActive])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  userId       String
+  status       OrderStatus @default(PENDING)
+  subtotalMnt  Int
+  deliveryMnt  Int         @default(0)
+  totalMnt     Int
+  address      String?
+  phone        String?
+  note         String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items OrderItem[]
+
+  @@index([userId, createdAt])
+}
+
+model OrderItem {
+  id           String @id @default(cuid())
+  orderId      String
+  productId    String
+  quantity     Int
+  unitPriceMnt Int // snapshot at purchase time
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+enum ListingCondition {
+  NEW
+  LIKE_NEW
+  USED
+}
+
+enum ListingStatus {
+  ACTIVE
+  RESERVED
+  SOLD
+  EXPIRED
+}
+
+// Peer-to-peer marketplace (user-to-user).
+model MarketplaceListing {
+  id          String           @id @default(cuid())
+  sellerId    String
+  title       String
+  description String?          @db.Text
+  category    ProductCategory  @default(OTHER)
+  condition   ListingCondition @default(USED)
+  status      ListingStatus    @default(ACTIVE)
+  priceMnt    Int
+  city        String           @default("Ulaanbaatar")
+  district    String?
+  phone       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  seller    User       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  images    Image[]
+  bookmarks Bookmark[]
+
+  @@index([status, category])
+  @@index([sellerId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lost & Found, Adoption
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum LostFoundType {
+  LOST
+  FOUND
+}
+
+enum LostFoundStatus {
+  OPEN
+  REUNITED
+  CLOSED
+}
+
+model LostFoundReport {
+  id          String          @id @default(cuid())
+  reporterId  String
+  petId       String? // linked profile when reporter owns the pet
+  type        LostFoundType
+  status      LostFoundStatus @default(OPEN)
+  petName     String?
+  species     PetSpecies      @default(DOG)
+  breedName   String?
+  color       String?
+  description String          @db.Text
+  lastSeenAt  DateTime
+  address     String?
+  district    String?
+  city        String          @default("Ulaanbaatar")
+  latitude    Float?
+  longitude   Float?
+  rewardMnt   Int?
+  phone       String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  reporter User    @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  pet      Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
+  images   Image[]
+
+  @@index([type, status])
+  @@index([latitude, longitude])
+}
+
+enum AdoptionStatus {
+  AVAILABLE
+  PENDING
+  ADOPTED
+}
+
+model AdoptionListing {
+  id          String         @id @default(cuid())
+  businessId  String // shelter / rescue
+  petId       String         @unique
+  status      AdoptionStatus @default(AVAILABLE)
+  story       String?        @db.Text
+  goodWith    String[] // e.g. ["kids", "cats", "dogs"]
+  feeMnt      Int?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  business     Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  pet          Pet                   @relation(fields: [petId], references: [id], onDelete: Cascade)
+  applications AdoptionApplication[]
+
+  @@index([status])
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  REVIEWING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+model AdoptionApplication {
+  id          String            @id @default(cuid())
+  listingId   String
+  applicantId String
+  status      ApplicationStatus @default(SUBMITTED)
+  message     String            @db.Text
+  homeType    String? // apartment / house / yard
+  hasOtherPets Boolean          @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  listing   AdoptionListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  applicant User            @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, applicantId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared: images (Cloudinary), bookmarks
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Image {
+  id       String  @id @default(cuid())
+  url      String
+  publicId String? // Cloudinary public_id
+  alt      String?
+  width    Int?
+  height   Int?
+  order    Int     @default(0)
+
+  petId            String?
+  breedId          String?
+  businessId       String?
+  reviewId         String?
+  postId           String?
+  productId        String?
+  listingId        String?
+  lostFoundId      String?
+  medicalRecordId  String?
+
+  pet           Pet?                @relation(fields: [petId], references: [id], onDelete: Cascade)
+  breed         Breed?              @relation(fields: [breedId], references: [id], onDelete: Cascade)
+  business      Business?           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  review        Review?             @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  post          Post?               @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product       Product?            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  listing       MarketplaceListing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  lostFound     LostFoundReport?    @relation(fields: [lostFoundId], references: [id], onDelete: Cascade)
+  medicalRecord MedicalRecord?      @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+
+  @@index([petId])
+  @@index([businessId])
+  @@index([postId])
+  @@index([productId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  businessId String?
+  articleId  String?
+  productId  String?
+  listingId  String?
+  eventId    String?
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business?           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  article  Article?            @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  product  Product?            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  listing  MarketplaceListing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  event    Event?              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@unique([userId, articleId])
+  @@unique([userId, productId])
+  @@unique([userId, listingId])
+  @@unique([userId, eventId])
+  @@index([userId])
+}
